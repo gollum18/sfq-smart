@@ -1,6 +1,5 @@
 # SMART
-NS-2 and eventual C Implementation of modified statistical fair queuing with techniques inspired from machine learning and modern AQM methodology.
-
+NS-2 and eventual C implementation of the SMART discipline of AI-based router forwarding techniques. These techniques should be simple enough to implement on modern routers with no issue.
 
 ## Introduction
 
