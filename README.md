@@ -2,13 +2,15 @@
 NS-2 and eventual C implementation of the SMART discipline of AI-based router forwarding techniques. These techniques should be simple enough to implement on modern routers with no issue.
 
 ## Introduction
+Modern routers are now sufficiently powerful enough to utilize smarter queuing disciplines, however, many routers still employ so-called 'dumb' techniques like first-in first-out (FIFO), round robin (RR), deficit round robin (DRR), and priority queuing. Meanwhile there has been active research in the area of smarter queuing disciplines within the realm of active queue management (AQM) with notable contributions such as random early detection (RED) and controlled delay (CoDel). These algorithms are more portable than the one proposed here as they are built as wide-spectrum solutions targeting devices from wireless sensors up to commercial grade switching devices. The issue is a compromise. These algorithms are smart not because they apply artificial intelligence (AI), but because they use statistical methods and control theory to pseudo-intelligently control packet queues.
 
+SMART is a proposed paradigm for controlling queuing delay by employing classical and modern techniques from AI such as reinforcement learning, Markov decision processes, and feature-based learning. This algorithm plans to employ advanced computational techniques to more intelligently make decisions regarding queuing delay.
 
 ## Abstract
-SFQ-Smart is meant to be implemented on routers not end hosts. There are better machine learning models for packet switching that exist for end hosts such as `Titan`. SFQ-Smart implements a model whereby the router builds a policy over time for dealing with congestion. Congestion however is temporal in nature. In an ordinary computer network, packets occur in regular streams (as in TCP traffic) with intermittent bursts occuring at irregulated intervals (as in UDP traffic).
-Therefore, SFQ-Smart needs ways to deal with the varying nature of service in the Internet.
+SMART is meant to be implemented on routers not end hosts. There are better machine learning models for packet switching that exist for end hosts such as `Titan`. SMART implements a model whereby the router builds a policy over time for dealing with congestion. Congestion however is temporal in nature. In an ordinary computer network, packets occur in regular streams (as in TCP traffic) with intermittent bursts occuring at irregulated intervals (as in UDP traffic).
+Therefore, SMART needs ways to deal with the varying nature of service in the Internet.
 
-SFQ-Smart implements a utility-based learning model where the agent tries to consistently maximize its reward from packet service. The model rewards the agent using a relationship between packet delay and persistent congestion. Packet delay is easy to measure, however persistent congestion is more difficult to deal with. Persistent congestion is modeled using an additive increase, multiplicative decrease model whereby persistently high delay exhibits a linear
+SMMART implements a utility-based learning model where the agent tries to consistently maximize its reward from packet service. The model rewards the agent using a relationship between packet delay and persistent congestion. Packet delay is easy to measure, however persistent congestion is more difficult to deal with. Persistent congestion is modeled using an additive increase, multiplicative decrease model whereby persistently high delay exhibits a linear
 relationship on the model while low or no congestion exhibits an inverse exponential relationship on the model. 
 
 ## Theory
@@ -36,8 +38,7 @@ With that out of the way, we can define the algorithm.
 
 Let *A* represent the SFQ-Smart algorithm which defines the following functions:
 
-+ `estimate(e, s, a, b) -> e`: Produces an estimate value, e, from the previous estimate, e, using the weighting variables, a and b.
-+ `evalulate(s, a) -> e`: Produces an evaluation (a score), e, of a state s using action a.
++ `estimate(e, s, a) -> e`: Produces an estimate value, e, from the previous estimate, e and a sample value s, using the learning parameter, a. The learning parameter must be in the range [0, 1].
 + `normalize(v, min, max) -> w`: Produces a normalized value, w, in the range [0, 1] given a value 
 + `reward(s, s', a) -> r`: Determines the reward, r, for transitioning from state, s, to state, s', using the action, a.
 + `successors(s, A) -> S`: Generates a set of successor states, S, that from a state, s, using a set of actions, A.
