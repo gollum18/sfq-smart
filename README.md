@@ -47,10 +47,11 @@ Let *A* represent the SFQ-Smart algorithm which defines the following functions:
 SMART defines and implements three queuing models based on the above theory. These models are inspired from classical and modern AI machine learning techniques and are as follows:
 
 1. SMART-RL: SMART queuing discipline that implements techniques from reinforcement learning. 
-2. SMART-MDP: Smart queuing disicpline that implements techniques from Markov Decision Processes.
+2. SMART-MDP: SMART queuing disicpline that implements techniques from Markov Decision Processes.
 3. SMART-FB: SMART queuing discipline that implements techniques from Feature-based learning.
 
 These models were carefully selected to ensure that the router only needs to maintian information on the previous state for decision making.
 
-## Status
-SMART is still in the early design stages. I would ask that if you want to contribute to this project please abide by the GPL-3.0 license. I would also appreciate that if you make any meaningful contributions to the project that you contribute them back to this code base.
+## Implementation Status
+SMART is still in the early design stages. I would ask that if you want to contribute to this project please abide by the GPL-3.0 license. I would also appreciate that if you make any meaningful contributions to the project that you contribute them back to this code base. Please refrain from implemeting this software in the discrete network simulator NS-2, I am already handling it. That said, the implementation provided here requires the NS-2 discrete network
+simulator in order to run the SMART implementation.
