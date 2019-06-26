@@ -1,58 +1,23 @@
 # SMART
-NS-2 and eventual C implementation of the SMART discipline of AI-based router forwarding techniques. These techniques should be simple enough to implement on modern routers with no issue.
+Formerly known as SFQ-Smart. SMART is an attempt to make queuing smarter. SMART attempts to employ various forms of machine learning to determine bad queue from good queue.
 
-## Introduction
-Modern routers are now sufficiently powerful enough to utilize smarter queuing disciplines, however, many routers still employ so-called 'dumb' techniques like first-in first-out (FIFO), round robin (RR), deficit round robin (DRR), and priority queuing. Meanwhile there has been active research in the area of smarter queuing disciplines within the realm of active queue management (AQM) with notable contributions such as random early detection (RED) and controlled delay (CoDel). These algorithms are more portable than the one proposed here as they are built as wide-spectrum solutions targeting devices from wireless sensors up to commercial grade switching devices. The issue is a compromise. These algorithms are smart not because they apply artificial intelligence (AI), but because they use statistical methods and control theory to pseudo-intelligently control packet queues.
+## Description
+At a high level, SMART associates queue characteristics with queue classification. SMART attempts to differentiate persistent congestion from temporary delay. Peristent delay arises from the persistently full buffer problem or more eponomously, bufferbloat. This research will make use of Reinforcement Learning, Markov Decision Processes, and simple Neural Networks such as Logistic Regression. These algorithms comprise a series of SMART variants that will be rigorously benchmarked against the Controlled Delay active queue management algorithm.
 
-SMART is a proposed paradigm for controlling queuing delay by employing classical and modern techniques from AI such as reinforcement learning, Markov decision processes, and feature-based learning. This algorithm plans to employ advanced computational techniques to more intelligently make decisions regarding queuing delay.
+Certain machine learning algorithms make use of forward state prediction where the agent attempts to simulate the state of the environment by applying all actions available actions to the environment then evaluating the resulting states through an evaluation function. The maximum action is thus taken as the agents action and algorithm values are updated appropriately. This is impractical in an environment as dynamic as packet queue management. Instead, where appropriate, this algorithm creates a policy whereby the agent picks the probabilistic best action based on past events. The agent will then perform a step similar to backpropagation where the agent updates its policy based on evaluated real state.
 
-## Abstract
-SMART is meant to be implemented on routers not end hosts. There are better machine learning models for packet switching that exist for end hosts such as `Titan`. SMART implements a model whereby the router builds a policy over time for dealing with congestion. Congestion however is temporal in nature. In an ordinary computer network, packets occur in regular streams (as in TCP traffic) with intermittent bursts occuring at irregulated intervals (as in UDP traffic).
-Therefore, SMART needs ways to deal with the varying nature of service in the Internet.
+Certain algorithms, such as Reinforcement Learning require the state space be encapsulated in a succint description. I have participated in projects incorporating reinforcement learning where we made the mistake of not doing so, and the state space grew too large for the agent to realistically maintain (see ['AI: Poker Project'](https://github.com/gollum18/Poker-Project) for an example. Therefore, where necessary, the agent will use a classification function to encapsulate the state of the router into a finite set of possible states. To ensure consistency, the classification function will make observations on most recent queue length and packet delay. These variables and their relevance to queue classification will be expounded on in a later section.
 
-SMMART implements a utility-based learning model where the agent tries to consistently maximize its reward from packet service. The model rewards the agent using a relationship between packet delay and persistent congestion. Packet delay is easy to measure, however persistent congestion is more difficult to deal with. Persistent congestion is modeled using an additive increase, multiplicative decrease model whereby persistently high delay exhibits a linear
-relationship on the model while low or no congestion exhibits an inverse exponential relationship on the model. 
+SMART makes no observations on the state of other routers in the network (as in fact, it cannot, unless Software Defined Networking (SDN) comes into play). Speaking on SDN, it is entirely possible that these algorithms would be better suited to being deployed in an SDN setting. In such a scenario, a remote server/host/client would be responsible for the control plane funcitonality of the router. The router is solely responsible for data plane functions such as forwarding through a table maintained via the controller. Since we are discussing the Internet, anything can happen. That is, I do not have enough trust in SDN to ensure it can perform well in a time-sensitive environment without overhead. Contrarily, SMART implements a handful of CPU-intensive computations. Fortunately, modern mid-tier routers (and certain commercial routers) are more than powerful enough to handle these algorithms.
+
+One last note: SMART does not make any attempt to be a deep learning platform. In fact, SMART is designed for platforms that do not have the resources necessary for effective deep learning (routers do not come with GPUs, eh?) As stated above, perhaps this would be possible if SMART were deployed on an SDN platform, but that is not the goal of this project.
 
 ## Theory
-Let *Z* be the state of a statistical multiplexer with the following characteristics:
+SMART implements three machine learning models in packet scheduling: Reinforcement Learning, Markov Decision Processes, and Neural Networks. While most readers interested in SMART should be at least somewhat familiar with machine learning and the aforementioned ML categories, however, I will provide an overview here.
 
-+ *r*: The packet arrival rate (always variable).
-+ *s*: The packet service rate (almost always fixed).
-+ *q*: The packet queue.
+A few things to note before we delve into these three categories in depth:
 
-Then the system load is given by the following equation: *r*/*s*=*p* where *p* is the Greek symbol, rho.
-
-According to queuing theory, as *p* approaches 1, *q* will start to experience more and more delay. If at any time, *p* exceeds 1, then the *q* will grow indefinitely and packets will be dropped.
-
-Also, for simplicities sake, assume that the multiplexer has a single input port and a single output port.
-
-Additionally, let the following characteristics be observable from *Z*:
-
-+ *d*: The most recent packet delay.
-+ *n*: The number of packets in the queue.
-+ *l*: The most recent packet size.
-
-Finally, assume that the router also tracks the average, min, and max of the above variables.
-
-With that out of the way, we can define the algorithm.
-
-Let *A* represent the SFQ-Smart algorithm which defines the following functions:
-
-+ `estimate(e, s, a) -> e`: Produces an estimate value, e, from the previous estimate, e and a sample value s, using the learning parameter, a. The learning parameter must be in the range [0, 1].
-+ `normalize(v, min, max) -> w`: Produces a normalized value, w, in the range [0, 1] given a value 
-+ `reward(s, s', a) -> r`: Determines the reward, r, for transitioning from state, s, to state, s', using the action, a.
-+ `successors(s, A) -> S`: Generates a set of successor states, S, that from a state, s, using a set of actions, A.
-+ `transition(s, a) -> s'`: Applies the action, a, to state, s, to produce a new state, s'.
-
-## Models
-SMART defines and implements three queuing models based on the above theory. These models are inspired from classical and modern AI machine learning techniques and are as follows:
-
-1. SMART-RL: SMART queuing discipline that implements techniques from reinforcement learning. 
-2. SMART-MDP: SMART queuing disicpline that implements techniques from Markov Decision Processes.
-3. SMART-FB: SMART queuing discipline that implements techniques from Feature-based learning.
-
-These models were carefully selected to ensure that the router only needs to maintian information on the previous state for decision making.
-
-## Implementation Status
-SMART is still in the early design stages. I would ask that if you want to contribute to this project please abide by the GPL-3.0 license. I would also appreciate that if you make any meaningful contributions to the project that you contribute them back to this code base. Please refrain from implemeting this software in the discrete network simulator NS-2, I am already handling it. That said, the implementation provided here requires the NS-2 discrete network
-simulator in order to run the SMART implementation.
++ Machine learning is not a cure all. It is very good at solving specific problems given enough data, however, regardless of the size or quality of the training set, no ML algorithm can bever be 100% accurate.
++ Normally, machine learning algorithms are trained *before* they are deployed. SMART cannot utilize this approach as it is impossible to obtain a training set of suitable size for the algorithm, therefore SMART will be trained on deployment. The algorithm will contain a means to exit training state autonomously.
++ The feature vector for training purposes will be rather small. Well established research has already been consulted to determine that only a handful of queue features are neccessary to accurately gauge queue state.
++ All three of the algorithms employed by SMART attempt to solve a specific optimization problem under certain conditions. At each iteration, the algorithms attempt to make the best decision to move them from their current state to the best potential state. Some algorithms simulate the environment before the agent actually enacts their will on the real environment. This is impossible in SMART, and as such, all SMART algorithms will probabilistically make the best decision and update said state transition probabilities after each iteration of the algorithm.
