@@ -101,21 +101,22 @@ class SmartRLQueue : public Queue {
         TracedDouble prev_d_exp_;   // the previous delay experienced
 
         // Static state of the algorithm
+        
+        double discount_;   // the discount factor
 
+        // Dynamic state of the algorithm
+        QueueState state_;          // the state of the algorithm seen by new arrivals
+        TracedInt prev_curq_;       // the previous queue length (in bytes)
+        TracedDouble prev_d_exp_;   // the previous experienced delay
+        
         /* Notes on this structure:
          *  1.) The key value is a pair consisting of two Q_* states: the first for 
          *  the service delay, the second for the queue length.
          *  2.) The value is a pair consisting of: an action, and an associated 
          *  reward, in that order.
-         * THe agents goal is to maximize its total reward
+         * The agents goal is to maximize its total reward
          */
         map<pair<int, int>, pair<int, double>> states_;     // the state/action pairs
-        double discount_;                                   // the discount factor
-
-        // Dynamic state of the algorithm
-        QueueState state_;
-        TracedInt prev_curq_;
-        TracedDouble prev_d_exp_;
 
     private:
 
