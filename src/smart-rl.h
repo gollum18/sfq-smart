@@ -136,7 +136,7 @@ class SmartRLQueue : public Queue {
 
         // Determines the new average given the current average and a sample
         template <class T>
-        double average(T, double, double);
+        double average(T, T, double);
 
         // Classifies the queue into one of 5 states that represent varying levels of congestion
         Classification classify();
@@ -146,7 +146,7 @@ class SmartRLQueue : public Queue {
 
         // Normalizes a data value given the value, min, and max.
         template <class T>
-        double normalize(T, double, double);
+        double normalize(T, T, T);
 
         // Determines the reward when applying an action with a certain queue state.
         double reward(int, int);

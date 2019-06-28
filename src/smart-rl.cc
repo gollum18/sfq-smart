@@ -244,7 +244,7 @@ int SmartRLQueue::action(int state) {
  * @return A weighted average of a variable.
  */
 template <class T>
-double SmartRLQueue::average(T x, double y, double rate) {
+double SmartRLQueue::average(T x, T y, double rate) {
     return (1 - rate) * x + rate * y;
 }
 
@@ -253,8 +253,8 @@ double SmartRLQueue::average(T x, double y, double rate) {
  */
 Classification SmartRLQueue::classify() {
     // determine normalized values for the length and delay 
-    double len_norm = normalize(state_.curq_, state_.min_[Q_LENGTH], state_.max_[Q_LENGTH]);
-    double del_norm = normalize(state_.d_exp_, state_.min_[Q_DELAY], state_.max_[Q_DELAY]);
+    double len_norm = normalize((double)state_.curq_, state_.min_[Q_LENGTH], state_.max_[Q_LENGTH]);
+    double del_norm = normalize((double)state_.d_exp_, state_.min_[Q_DELAY], state_.max_[Q_DELAY]);
     // take their average, they should still be in the range [0, 1]
     double avg = (len_norm + del_norm) / 2.0;
     // stores the result
@@ -297,7 +297,7 @@ void SmartRLQueue::initialize() {
  * @return A normalized value in the range [0, 1].
  */
 template <class T>
-double SmartRLQueue::normalize(T x, double min, double max) {
+double SmartRLQueue::normalize(T x, T min, T max) {
     if (max - min == 0) {
         // This is a dangerous compromise
         // TODO: Determine the optimal value to return here as it will adversely affect the algorithm if it is not carefully chosen
@@ -336,7 +336,7 @@ void SmartRLQueue::update(Packet* pkt) {
     state_.d_exp_ = Scheduler::instance().clock() - HDR_CMN(pkt)->ts_;
 
     // update the average values
-    state_.avg_[Q_LENGTH] = average(state_.avg_[Q_LENGTH], (int)(state_.curq_), alpha_);
+    state_.avg_[Q_LENGTH] = average(state_.avg_[Q_LENGTH], (double)(state_.curq_), alpha_);
     state_.avg_[Q_DELAY] = average(state_.avg_[Q_DELAY], (double)(state_.d_exp_), alpha_);
     
     // update the min and max if needed
