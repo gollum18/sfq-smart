@@ -34,6 +34,7 @@
  */
 
 #include <sys/types.h>
+#include <utility>
 #include "config.h"
 #include "random.h"
 #include "flags.h"
@@ -54,7 +55,22 @@ static class SmartRLClass : public TclClass {
  *
  */
 SmartRLQueue::SmartRLQueue() : tchan_(0) {
-    
+    bind("alpha_", &alpha_);
+    bind("discount_", &discount_);
+    bind("curq_", &state_.curq_);
+    bind("d_exp_", &state_.d_exp_);
+    q_ = new PacketQueue();
+    pq_ = q_;
+    for (int i = 0; i < NUM_STATES; i++) {
+        policy_[i] = std::make_pair(i, 0.50);
+    }
+    reset();
+}
+
+SmartRLQueue::~SmartRLQueue() {
+    for (int i = 0; i < NUM_STATES; i++) {
+        delete policy_[i];
+    }
 }
 
 // NS method implementation
@@ -63,7 +79,10 @@ SmartRLQueue::SmartRLQueue() : tchan_(0) {
  *
  */
 void SmartRLQueue::reset() {
-
+    initialize();
+    prev_curq_ = 0;
+    prev_d_exp_ = 0.;
+    Queue::reset();
 }
 
 /**
@@ -74,6 +93,7 @@ void SmartRLQueue::enque(Packet* pkt) {
     if (q_->length() >= qlim_) {
         drop(pkt);
     } else {
+        HDR_CMN(pkt)->ts_ = Scheduler::instance().clock();
         q_->enque(pkt);
     }
 }
@@ -95,10 +115,10 @@ Packet* SmartRLQueue::deque() {
     update(pkt);
 
     // determine the state of the algorithm
-    int state = classify();
+    Classification cls = classify();
 
     // Determine the action to take
-    int action = action(state);
+    int action = action(cls.state);
 
     // Check to see if we need to deque another packet
     if (action == ACTION_DROP) {
@@ -108,24 +128,25 @@ Packet* SmartRLQueue::deque() {
         // note that the algorithm could be modified to ECN packets instead
         drop(pkt);
         // Check to see if we can deque another packet
-        if (q_->length > 0) {
+        if (q_->length() > 0) {
             // deque and update the algorithm again to account for it
             pkt = q_->deque();
             update(pkt);
-            state = classify();
+            cls = classify();
         } else { return 0; }
     }
 
     // Determine the reward from the state and action
-    double sa_reward = reward(state, action);
+    double sa_reward = reward(cls.state, action);
 
     // update the policy if necessary
-    if (reward > policy_[state].second) {
-        policy_[state].first = action;
-        policy_[state].second = sa_reward;
+    if (reward > policy_[cls.state].second) {
+        policy_[cls.state].first = action;
+        policy_[cls.state].second = sa_reward;
     }
 
-    // TODO: We still need to update the transition probability
+    // update the transition probability based on whats going on at the queue in terms of length and delay
+    trans_probs_[cls.state] = average(cls.res, trans_probs_[cls.state], alpha_);
 
     // discount the reward for each state, this is to encourage the agent
     //  to find potentially better options
@@ -138,17 +159,71 @@ Packet* SmartRLQueue::deque() {
 }
 
 /**
- *
+ * Handles commands passed from the TCL runtime to the queue.
+ * @param argc The number of arguments.
+ * @param argv The actual arguments.
+ * @return A TCL status code.
  */
 int SmartRLQueue::command(int argc, const char*const* argv) {
-
+    Tcl& tcl = Tcl::instance();
+    if (argc == 2) {
+        if (strcmp(argv[1], "reset") == 0) {
+            reset();
+            return (TCL_OK);
+        }
+    } else if (argc == 3) {
+        // attach a file for variable tracing
+        if (strcmp(argv[1], "attach") == 0) {
+            int mode;
+            const char* id = argv[2];
+            tchan_ = Tcl.GetChannel(tcl.interp(), (char*)id, &mode);
+            if (tchan_ == 0) {
+                tcl.resultf("SMART-RL trace: can't attach %s for writing", id);
+                return (TCL_ERROR);
+            }
+            return (TCL_OK);
+        }
+        // connect SMART-RL to the underlying queue
+        if (!strcmp(argv[1], "packetqueue-attach")) {
+            delete q_;
+            if (!(q_ = (PacketQueue*) TclObject::lookup(argv[2]))) {
+                return (TCL_ERROR);
+            } else {
+                pq_ = q_;
+                return (TCL_OK);
+            }
+        }
+    }
+    return (Queue::command(argc, argv));
 }
 
 /**
- *
+ * Writes a traced variable to the connected tracefile, called by the TracedVar 
+ * facility when a traced variables state changes.
+ * Tracing must be enabled in TCL for this to work.
+ * @param v The variable to write.
  */
 void SmartRLQueue::trace(TracedVar* v) {
+    const char *p;
 
+    if (((p = strstr(v->name(), "curq")) == NULL) &&
+        ((p = strstr(v->name(), "d_exp")) == NULL) ) {
+        fprintf(stderr, "CoDel: unknown trace var %s\n", v->name());
+        return;
+    }
+    if (tchan_) {
+        char wrk[500];
+        double t = Scheduler::instance().clock();
+        if(*p == 'c') {
+            sprintf(wrk, "c %g %d", t, int(*((TracedInt*) v)));
+        } else if(*p == 'd') {
+            sprintf(wrk, "d %g %g", t, double(*((TracedDouble*) v)));
+        }
+        int n = strlen(wrk);
+        wrk[n] = '\n'; 
+        wrk[n+1] = 0;
+        (void)Tcl_Write(tchan_, wrk, n+1);
+    }
 }
 
 // Utility method implementation
@@ -157,7 +232,7 @@ void SmartRLQueue::trace(TracedVar* v) {
  * Determines the appropriate action to take when dequeing a packet.
  */
 int SmartRLQueue::action(int state) {
-    if (Random::uniform(0, 1) < trans_probs_[state]) {
+    if (Random::uniform(0, 1) <= trans_probs_[state]) {
         // Follow policy
         return policy_[state].first;
     } else {
@@ -174,7 +249,8 @@ int SmartRLQueue::action(int state) {
  * @param rate The averaging rate.
  * @return A weighted average of a variable.
  */
-double SmartRLQueue::average(double x, double y, double rate) {
+template <class T>
+double SmartRLQueue::average(T x, double y, double rate) {
     return (1 - rate) * x + rate * y;
 }
 
@@ -187,24 +263,36 @@ int SmartRLQueue::classify() {
     double del_norm = normalize(state_.d_exp_, state_.min_[Q_DELAY], state_.max_[Q_DELAY]);
     // take their average, they should still be in the range [0, 1]
     double avg = (len_norm + del_norm) / 2.0;
+    // stores the result
+    Classification cls = {0, 0.};
+    cls.res = avg;
+    // determine the class
     if (avg < Q_STEADY_UB) {
-        return Q_STEADY;
+        cls.state = Q_STEADY;
     } else if (avg < Q_UNSTEADY_UB) {
-        return Q_UNSTEADY;
+        cls.state = Q_UNSTEADY;
     } else if (avg < Q_FILLING_UB) {
-        return Q_FILLING;
+        cls.state = Q_FILLING;
     } else if (avg < Q_CONGESTED_UB) {
-        return Q_CONGESTED;
+        cls.state = Q_CONGESTED;
     } else {
-        return Q_IMMINENT;
+        cls.state = Q_IMMINENT;
     }
+    return cls;
 }
 
 /**
  * Initializes the algorithm to initial state.
  */
 void SmartRLQueue::initialize() {
-    
+    state_.curq_ = 0;
+    state_.d_exp_ = 0.;
+    // fixed bound here because the state struct holds two values in its arrays
+    for (int i = 0; i < 2; i++) {
+        state_.avg_[i] = 0.;
+        state_.min_[i] = 0.;
+        state_.max_[i] = 0.;
+    }
 }
 
 /**
@@ -214,7 +302,8 @@ void SmartRLQueue::initialize() {
  * @param max The maximum observed value.
  * @return A normalized value in the range [0, 1].
  */
-double SmartRLQueue::normalize(double x, double min, double max) {
+template <class T>
+double SmartRLQueue::normalize(T x, double min, double max) {
     if (max - min == 0) {
         // This is a dangerous compromise
         // TODO: Determine the optimal value to return here as it will adversely affect the algorithm if it is not carefully chosen
@@ -231,23 +320,12 @@ double SmartRLQueue::reward(int state, int action) {
     double reward = 0.0;
     // determine whether dropping was a good idea
     if (action == ACTION_DROP) {
-        reward += 100 * state;
+        reward += 50 * state;
     } else {
         // the hardcoded 4 here is because there are 5 states indexed 0 -> 4
-        reward -= 100 * (4 - state);
+        reward -= 50 * (4 - state);
     }
-    // factor in the queue length
-    if (action == ACTION_DROP) {
-        
-    } else {
-
-    }
-    // factor in the delay
-    if (action == ACTION_DROP) {
-
-    } else {
-
-    }
+    // TODO: The reward function needs refined to take account for other features
     return reward;
 }
 

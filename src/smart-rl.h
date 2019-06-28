@@ -40,21 +40,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <map>
-#include <utility>
 #include "agent.h"
 #include "template.h"
 #include "trace.h"
 
-// Define state encapsulation
-typedef struct QueueState {
-    TracedInt curq_;
-    TracedDouble d_exp_;
-    double[2] avg_;
-    double[2] min_;
-    double[2] max_;
-} queue_state;
-
 // Define variable state descriptors and bounds
+#define NUM_STATES 5
 #define Q_STEADY 0
 #define Q_UNSTEADY 1
 #define Q_FILLING 2
@@ -66,14 +57,26 @@ typedef struct QueueState {
 #define Q_FILLING_UB 0.60
 #define Q_CONGESTED_UB 0.80
 
-// Define the actions to take when receiving a packet
-#define ACTION_ENQUE 0
+// Defines actions to take when dequeing
+#define ACTION_DEQUE 0
 #define ACTION_DROP 1
+
+// Define indexes for the queue state arrays
+#define Q_LENGTH 0
+#define Q_DELAY 1
 
 // Necessary STL imports
 
-using std::map
 using std::pair
+
+// Define state encapsulation
+typedef struct QueueState {
+    TracedDouble curq_;
+    TracedDouble d_exp_;
+    double[2] avg_;
+    double[2] min_;
+    double[2] max_;
+} queue_state;
 
 class SmartRLQueue : public Queue {
 
@@ -81,7 +84,7 @@ class SmartRLQueue : public Queue {
 
         // Constructors
         
-        SmartFBQueue();
+        SmartRLQueue();
 
     protected:
         
@@ -97,46 +100,45 @@ class SmartRLQueue : public Queue {
         
         PacketQueue* q_;            // the backing queue
         Tcl_Channel tchan_;         // the trace channel, where tracevars get written
-        TracedInt prev_curq_;       // the previous queue length (in bytes)
-        TracedDouble prev_d_exp_;   // the previous delay experienced
 
         // Static state of the algorithm
         
-        double discount_;   // the discount factor
+        double alpha_;      // the averaging factor, in range [0, 1]
+        double discount_;   // the discount factor, in range [0, 1]
 
         // Dynamic state of the algorithm
-        QueueState state_;          // the state of the algorithm seen by new arrivals
-        TracedInt prev_curq_;       // the previous queue length (in bytes)
-        TracedDouble prev_d_exp_;   // the previous experienced delay
         
-        /* Notes on this structure:
-         *  1.) The key value is a pair consisting of two Q_* states: the first for 
-         *  the service delay, the second for the queue length.
-         *  2.) The value is a pair consisting of: an action, and an associated 
-         *  reward, in that order.
-         * The agents goal is to maximize its total reward
-         */
-        map<pair<int, int>, pair<int, double>> states_;     // the state/action pairs
+        QueueState state_;              // the state of the algorithm seen by new arrivals
+        TracedDouble prev_curq_;        // the previous queue length (in bytes)
+        TracedDouble prev_d_exp_;       // the previous experienced delay
+        
+        pair<int, double>> policy_[5];  // stores the agents policy for each state
+        double trans_probs_[5];         // determines whether the agent follows policy, each entry should be in the range [0, 1] and indicates the agents chance to follow its optimal policy
 
     private:
 
-        // Determines the approriate action to take when receiving a packet
-        int action(Packet*);
+        // Determines the approriate action to take when a packet is dequed
+        int action(int);
 
-        // Classifies service delay seen by arrivals
-        int classify_delay();
+        // Determines the adversarial (opposite) action of the deque action given
+        int adversary(int action) = { return ACTION_DEQUE ? action == ACTION_DROP : ACTION_DEQUE; }
 
-        // Classifies queue length seen by arrivals
-        int classify_length();
+        // Determines the new average given the current average and a sample
+        template <class T>
+        double average(T, double, double);
 
-        // Classifies the queue itself
-        int classify_queue(int, int);
+        // Classifies the queue into one of 5 states that represent varying levels of congestion
+        int classify();
 
         // Initializes the state of the algorithm
         void initialize();
 
-        // Determines the reward when applying an action during enquing
-        double reward(int);
+        // Normalizes a data value given the value, min, and max.
+        template <class T>
+        double normalize(T, double, double);
+
+        // Determines the reward when applying an action with a certain queue state.
+        double reward(int, int);
 
         // Updates the state of the algorithm after dequeuing a packet
         void update(Packet*);
