@@ -61,9 +61,6 @@ SmartRLQueue::SmartRLQueue() : tchan_(0) {
     bind("d_exp_", &state_.d_exp_);
     q_ = new PacketQueue();
     pq_ = q_;
-    for (int i = 0; i < NUM_STATES; i++) {
-        policy_[i] = std::make_pair(i, 0.50);
-    }
     reset();
 }
 
@@ -131,22 +128,17 @@ Packet* SmartRLQueue::deque() {
     }
 
     // Determine the reward from the state and action
-    double sa_reward = reward(cls.state, sa_action);
+    double sa_reward = reward(cls, sa_action);
 
     // update the policy if necessary
     if (sa_reward > policy_[cls.state].second) {
         policy_[cls.state].first = sa_action;
         policy_[cls.state].second = sa_reward;
     }
+    
+    // TODO: Discount the reward for the selected state
 
-    // update the transition probability based on whats going on at the queue in terms of length and delay
-    trans_probs_[cls.state] = average(cls.res, trans_probs_[cls.state], alpha_);
-
-    // discount the reward for each state, this is to encourage the agent
-    //  to find potentially better options
-    for (int i = 0; i < NUM_STATES; i++) {
-        policy_[i].second = average(policy_[i].second, sa_reward, discount_);
-    }
+    // TODO: Update the transition probability for the selected state
 
     // Return the packet
     return pkt;
@@ -258,8 +250,7 @@ Classification SmartRLQueue::classify() {
     // take their average, they should still be in the range [0, 1]
     double avg = (len_norm + del_norm) / 2.0;
     // stores the result
-    Classification cls = {0, 0.};
-    cls.res = avg;
+    Classification cls = {0, len_norm, del_norm};
     // determine the class
     if (avg < Q_STEADY_UB) {
         cls.state = Q_STEADY;
@@ -279,6 +270,13 @@ Classification SmartRLQueue::classify() {
  * Initializes the algorithm to initial state.
  */
 void SmartRLQueue::initialize() {
+    // initialize the policy
+    for (int state = 0; state < NUM_STATES; state++) {
+        for (int action = 0; action < NUM_ACTIONS; action++) {
+            policy_[state][action] = -1000;
+        }
+    }
+    // initialize the previous state
     state_.curq_ = 0;
     state_.d_exp_ = 0.;
     // fixed bound here because the state struct holds two values in its arrays
@@ -310,16 +308,28 @@ double SmartRLQueue::normalize(T x, T min, T max) {
  * Determines a reward for the agent taking a specific action from a given state.
  * @param action The action the agent took during the current iteration.
  */
-double SmartRLQueue::reward(int state, int action) {
+double SmartRLQueue::reward(Classification cls, int action) {
     double reward = 0.0;
-    // determine whether dropping was a good idea
+    
+    // factor in the decision to drop
     if (action == ACTION_DROP) {
-        reward += 50 * state;
+        reward += 50 * cls.state;
     } else {
-        // the hardcoded 4 here is because there are 5 states indexed 0 -> 4
-        reward -= 50 * (4 - state);
+        reward -= 50 * (4 - cls.state);
     }
-    // TODO: The reward function needs refined to take account for other features
+    
+    // get the proporition of length and delay
+    double len_frac = cls.len_norm / (cls.len_norm + cls.del_norm);
+    double del_frac = cls.del_norm / (cls.len_norm + cls.del_norm);
+    
+    // account for the drift from last state
+    reward += -50 * len_frac * (state_.curq_ - prev_state_.curq_);
+    reward += -50 * del_frac * (state_.d_exp_ - prev_state_.d_exp);
+    
+    // account for drift from the mean
+    reward += -50 * len_frac * (state_.curq_ - state_.avg_[Q_LENGTH]);
+    reward += -50 * del_frac * (state_.d_exp_ - state_.avg_[Q_DELAY]);
+    
     return reward;
 }
 

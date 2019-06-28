@@ -63,6 +63,7 @@
 #define Q_CONGESTED_UB 0.80
 
 // Defines actions to take when dequeing
+#define NUM_ACTIONS 2
 #define ACTION_DEQUE 0
 #define ACTION_DROP 1
 
@@ -70,14 +71,11 @@
 #define Q_LENGTH 0
 #define Q_DELAY 1
 
-// Necessary STL imports
-
-using std::pair;
-
 // Define a result for classification
 typedef struct Classification {
-    int state;  // the classification class itself
-    double res; // the deciding factor for classification
+    int state;          // the classification class itself
+    double len_norm;    // the normalized length
+    double del_norm;    // the normalized delay
 } queue_class;
 
 // Define state encapsulation
@@ -123,8 +121,8 @@ class SmartRLQueue : public Queue {
         TracedDouble prev_curq_;        // the previous queue length (in bytes)
         TracedDouble prev_d_exp_;       // the previous experienced delay
         
-        pair<int, double> policy_[5];  // stores the agents policy for each state
-        double trans_probs_[5];         // determines whether the agent follows policy, each entry should be in the range [0, 1] and indicates the agents chance to follow its optimal policy
+        double policy_[NUM_STATES][NUM_ACTIONS];    // stores the agents policy for each state
+        double trans_probs_[NUM_STATES];    // determines whether the agent follows policy, each entry should be in the range [0, 1] and indicates the agents chance to follow its optimal policy
 
     private:
 
