@@ -147,7 +147,7 @@ class SmartRLQueue : public Queue {
         double normalize(T, T, T);
 
         // Determines the reward when applying an action with a certain queue state.
-        double reward(int, int);
+        double reward(Classification, int);
 
         // Updates the state of the algorithm after dequeuing a packet
         void update(Packet*);
