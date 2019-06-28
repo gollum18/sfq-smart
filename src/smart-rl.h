@@ -29,8 +29,13 @@
  * files (smart-*.cc) pointed to by NS-2s makefile. I cannot assist 
  * you in compiling NS-2 as it differs per platform. 
  *
- * Note that NS-2 is known not to work correctly on Linux deployments 
+ * Note 1: NS-2 is known not to work correctly on Linux deployments 
  * such as CygWin.
+ *
+ * Note 2: Please compile NS-2 using g++ or another C++ compatible compiler.
+ * It will still compile fine, trust me. SMARTs NS-2 implementation employs 
+ * C++ idioms and is reliant on being compiled using C++. Compiling with 
+ * a C compiler will fail.
  */
 
 #ifndef NS_SMART_RL
@@ -67,15 +72,21 @@
 
 // Necessary STL imports
 
-using std::pair
+using std::pair;
+
+// Define a result for classification
+typedef struct Classification {
+    int state;  // the classification class itself
+    double res; // the deciding factor for classification
+} queue_class;
 
 // Define state encapsulation
 typedef struct QueueState {
     TracedDouble curq_;
     TracedDouble d_exp_;
-    double[2] avg_;
-    double[2] min_;
-    double[2] max_;
+    double avg_[2];
+    double min_[2];
+    double max_[2];
 } queue_state;
 
 class SmartRLQueue : public Queue {
@@ -112,7 +123,7 @@ class SmartRLQueue : public Queue {
         TracedDouble prev_curq_;        // the previous queue length (in bytes)
         TracedDouble prev_d_exp_;       // the previous experienced delay
         
-        pair<int, double>> policy_[5];  // stores the agents policy for each state
+        pair<int, double> policy_[5];  // stores the agents policy for each state
         double trans_probs_[5];         // determines whether the agent follows policy, each entry should be in the range [0, 1] and indicates the agents chance to follow its optimal policy
 
     private:
@@ -121,14 +132,14 @@ class SmartRLQueue : public Queue {
         int action(int);
 
         // Determines the adversarial (opposite) action of the deque action given
-        int adversary(int action) = { return ACTION_DEQUE ? action == ACTION_DROP : ACTION_DEQUE; }
+        int adversary(int action) { return ACTION_DEQUE ? action == ACTION_DROP : ACTION_DEQUE; }
 
         // Determines the new average given the current average and a sample
         template <class T>
         double average(T, double, double);
 
         // Classifies the queue into one of 5 states that represent varying levels of congestion
-        int classify();
+        Classification classify();
 
         // Initializes the state of the algorithm
         void initialize();
@@ -143,6 +154,6 @@ class SmartRLQueue : public Queue {
         // Updates the state of the algorithm after dequeuing a packet
         void update(Packet*);
 
-} smart_rl_queue;
+};
 
 #endif

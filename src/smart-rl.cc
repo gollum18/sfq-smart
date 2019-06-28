@@ -67,12 +67,6 @@ SmartRLQueue::SmartRLQueue() : tchan_(0) {
     reset();
 }
 
-SmartRLQueue::~SmartRLQueue() {
-    for (int i = 0; i < NUM_STATES; i++) {
-        delete policy_[i];
-    }
-}
-
 // NS method implementation
 
 /**
@@ -104,7 +98,7 @@ void SmartRLQueue::enque(Packet* pkt) {
 Packet* SmartRLQueue::deque() {
     // Note that I always put these in to guard against very stupid behavior encoded into NS-2s Queue class deque routine. 
     // In said routine, if the queue is empty, NS-2 will error out when deque is called and program execution will terminate.
-    if (q_->length == 0) {
+    if (q_->length() == 0) {
         return 0;
     }
 
@@ -118,10 +112,10 @@ Packet* SmartRLQueue::deque() {
     Classification cls = classify();
 
     // Determine the action to take
-    int action = action(cls.state);
+    int sa_action = action(cls.state);
 
     // Check to see if we need to deque another packet
-    if (action == ACTION_DROP) {
+    if (sa_action == ACTION_DROP) {
         // technically, routers only need to drop one packet to signal congestion
         //  However: the smarter idea may be to drop multiple packets to signal
         //  to multiple senders to back off
@@ -137,11 +131,11 @@ Packet* SmartRLQueue::deque() {
     }
 
     // Determine the reward from the state and action
-    double sa_reward = reward(cls.state, action);
+    double sa_reward = reward(cls.state, sa_action);
 
     // update the policy if necessary
-    if (reward > policy_[cls.state].second) {
-        policy_[cls.state].first = action;
+    if (sa_reward > policy_[cls.state].second) {
+        policy_[cls.state].first = sa_action;
         policy_[cls.state].second = sa_reward;
     }
 
@@ -151,7 +145,7 @@ Packet* SmartRLQueue::deque() {
     // discount the reward for each state, this is to encourage the agent
     //  to find potentially better options
     for (int i = 0; i < NUM_STATES; i++) {
-        policy_[i].second = average(policy_[i].second, reward, discount_);
+        policy_[i].second = average(policy_[i].second, sa_reward, discount_);
     }
 
     // Return the packet
@@ -176,7 +170,7 @@ int SmartRLQueue::command(int argc, const char*const* argv) {
         if (strcmp(argv[1], "attach") == 0) {
             int mode;
             const char* id = argv[2];
-            tchan_ = Tcl.GetChannel(tcl.interp(), (char*)id, &mode);
+            tchan_ = Tcl_GetChannel(tcl.interp(), (char*)id, &mode);
             if (tchan_ == 0) {
                 tcl.resultf("SMART-RL trace: can't attach %s for writing", id);
                 return (TCL_ERROR);
@@ -186,9 +180,9 @@ int SmartRLQueue::command(int argc, const char*const* argv) {
         // connect SMART-RL to the underlying queue
         if (!strcmp(argv[1], "packetqueue-attach")) {
             delete q_;
-            if (!(q_ = (PacketQueue*) TclObject::lookup(argv[2]))) {
+            if (!(q_ = (PacketQueue*) TclObject::lookup(argv[2])))
                 return (TCL_ERROR);
-            } else {
+            else {
                 pq_ = q_;
                 return (TCL_OK);
             }
@@ -257,7 +251,7 @@ double SmartRLQueue::average(T x, double y, double rate) {
 /**
  * Determines the service class that the queue falls into.
  */
-int SmartRLQueue::classify() {
+Classification SmartRLQueue::classify() {
     // determine normalized values for the length and delay 
     double len_norm = normalize(state_.curq_, state_.min_[Q_LENGTH], state_.max_[Q_LENGTH]);
     double del_norm = normalize(state_.d_exp_, state_.min_[Q_DELAY], state_.max_[Q_DELAY]);
@@ -342,8 +336,8 @@ void SmartRLQueue::update(Packet* pkt) {
     state_.d_exp_ = Scheduler::instance().clock() - HDR_CMN(pkt)->ts_;
 
     // update the average values
-    state_.avg_[Q_LENGTH] = average(state_.avg_[Q_LENGTH], state_.curq_);
-    state_.avg_[Q_DELAY] = average(state_.avg_[Q_DELAY], state_.d_exp_);
+    state_.avg_[Q_LENGTH] = average(state_.avg_[Q_LENGTH], (int)(state_.curq_), alpha_);
+    state_.avg_[Q_DELAY] = average(state_.avg_[Q_DELAY], (double)(state_.d_exp_), alpha_);
     
     // update the min and max if needed
     if (state_.curq_ < state_.min_[Q_LENGTH]) {
