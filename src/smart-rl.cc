@@ -103,7 +103,9 @@ Packet* SmartRLQueue::deque() {
     Packet* pkt =  q_->deque();
 
     // Update the state of the algorithm
-    update(pkt);
+    if (iterations_ < rounds_) {
+        update(pkt);
+    }
 
     // determine the state of the algorithm
     Classification cls = classify();
@@ -122,23 +124,34 @@ Packet* SmartRLQueue::deque() {
         if (q_->length() > 0) {
             // deque and update the algorithm again to account for it
             pkt = q_->deque();
-            update(pkt);
+            if (iterations_ < rounds_) {
+                update(pkt);
+            }
             cls = classify();
         } else { return 0; }
     }
 
-    // Determine the reward from the state and action
-    double sa_reward = reward(cls, sa_action);
 
-    // update the policy if necessary
-    if (sa_reward > policy_[cls.state].second) {
-        policy_[cls.state].first = sa_action;
-        policy_[cls.state].second = sa_reward;
+    // only update state if we are training
+    if (iterations_ < rounds_) {
+        // Determine the reward from the state and action
+        double sa_reward = reward(cls, sa_action);
+    `
+        // update the policy if necessary
+        if (sa_reward > policy_[cls.state].reward) {
+            policy_[cls.state].action = sa_action;
+            policy_[cls.state].reward = sa_reward;
+        }
+        
+        // Discount the reward for all states to encourage exploration
+        for (int i = 0; i < NUM_STATES; i++) {
+            policy_[i].reward = policy_[i].reward * discount_;
+        }
+
+        // Update the transition probabilty for the selected state
+        trans_probs_[cls.state] = average(trans_probs_[cls.state], transition(cls), alpha_);
+
     }
-    
-    // TODO: Discount the reward for the selected state
-
-    // TODO: Update the transition probability for the selected state
 
     // Return the packet
     return pkt;
@@ -220,10 +233,10 @@ void SmartRLQueue::trace(TracedVar* v) {
 int SmartRLQueue::action(int state) {
     if (Random::uniform(0, 1) <= trans_probs_[state]) {
         // Follow policy
-        return policy_[state].first;
+        return policy_[state].action;
     } else {
         // Follow opposing policy
-        return adversary(policy_[state].first);
+        return adversary(policy_[state].action);
     }
 }
 
@@ -272,9 +285,8 @@ Classification SmartRLQueue::classify() {
 void SmartRLQueue::initialize() {
     // initialize the policy
     for (int state = 0; state < NUM_STATES; state++) {
-        for (int action = 0; action < NUM_ACTIONS; action++) {
-            policy_[state][action] = -1000;
-        }
+        policy_[state].action = DEFAULT_ACTIONS[state];
+        policy_[state].reward = DEFAULT_REWARD;
     }
     // initialize the previous state
     state_.curq_ = 0;
@@ -331,6 +343,18 @@ double SmartRLQueue::reward(Classification cls, int action) {
     reward += -50 * del_frac * (state_.d_exp_ - state_.avg_[Q_DELAY]);
     
     return reward;
+}
+
+/**
+ * Determines the new transition probability for a state.
+ * @param cls The classification of the algorithms state.
+ * @return A number in the range [0, 1] indicating the new transition
+ * probability.
+ */
+double SmartRLQueue::transition(Classification cls) {
+    // Naive transition function that essentially mimcs the classification
+    //  function
+    return (cls.len_norm + cls.del_norm) / 2.0;
 }
 
 /**

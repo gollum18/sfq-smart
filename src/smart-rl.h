@@ -71,6 +71,17 @@
 #define Q_LENGTH 0
 #define Q_DELAY 1
 
+// Define initialization values for the policy
+const int DEFAULT_ACTIONS[5] = {ACTION_DEQUE, ACTION_DEQUE, ACTION_DEQUE, 
+    ACTION_DROP, ACTION_DROP};
+const double DEFAULT_REWARD = -1000.;
+
+// Define a structure for holding current policy state
+typedef struct Policy {
+    int action;
+    double reward;
+} queue_policy;
+
 // Define a result for classification
 typedef struct Classification {
     int state;          // the classification class itself
@@ -114,6 +125,7 @@ class SmartRLQueue : public Queue {
         
         double alpha_;      // the averaging factor, in range [0, 1]
         double discount_;   // the discount factor, in range [0, 1]
+        int rounds_;        // the number of training rounds allowed
 
         // Dynamic state of the algorithm
         
@@ -121,25 +133,27 @@ class SmartRLQueue : public Queue {
         TracedDouble prev_curq_;        // the previous queue length (in bytes)
         TracedDouble prev_d_exp_;       // the previous experienced delay
         
-        double policy_[NUM_STATES][NUM_ACTIONS];    // stores the agents policy for each state
+        int iterations_;                // the number of rounds so far
+
+        Policy policy_[NUM_STATES];     // stores the agents policy for each state
         double trans_probs_[NUM_STATES];    // determines whether the agent follows policy, each entry should be in the range [0, 1] and indicates the agents chance to follow its optimal policy
 
     private:
 
-        // Determines the approriate action to take when a packet is dequed
+        // Determines the approriate action to take when a packet is dequed.
         int action(int);
 
-        // Determines the adversarial (opposite) action of the deque action given
+        // Determines the adversarial (opposite) action of the deque action. given
         int adversary(int action) { return ACTION_DEQUE ? action == ACTION_DROP : ACTION_DEQUE; }
 
-        // Determines the new average given the current average and a sample
+        // Determines the new average given the current average and a sample.
         template <class T>
         double average(T, T, double);
 
-        // Classifies the queue into one of 5 states that represent varying levels of congestion
+        // Classifies the queue into one of 5 states that represent varying levels of congestion.
         Classification classify();
 
-        // Initializes the state of the algorithm
+        // Initializes the state of the algorithm.
         void initialize();
 
         // Normalizes a data value given the value, min, and max.
@@ -149,7 +163,10 @@ class SmartRLQueue : public Queue {
         // Determines the reward when applying an action with a certain queue state.
         double reward(Classification, int);
 
-        // Updates the state of the algorithm after dequeuing a packet
+        // Determines a transition probability given a state classification.
+        double transition(Classification);
+
+        // Updates the state of the algorithm after dequeuing a packet.
         void update(Packet*);
 
 };
