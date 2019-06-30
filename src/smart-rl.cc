@@ -136,7 +136,7 @@ Packet* SmartRLQueue::deque() {
     if (iterations_ < rounds_) {
         // Determine the reward from the state and action
         double sa_reward = reward(cls, sa_action);
-    `
+    
         // update the policy if necessary
         if (sa_reward > policy_[cls.state].reward) {
             policy_[cls.state].action = sa_action;
@@ -308,10 +308,8 @@ void SmartRLQueue::initialize() {
  */
 template <class T>
 double SmartRLQueue::normalize(T x, T min, T max) {
-    if (max - min == 0) {
-        // This is a dangerous compromise
-        // TODO: Determine the optimal value to return here as it will adversely affect the algorithm if it is not carefully chosen
-        return 0.5;
+    if (max == min) {
+        return 1.0;
     }
     return (x - min) / (max - min);
 }
@@ -335,8 +333,8 @@ double SmartRLQueue::reward(Classification cls, int action) {
     double del_frac = cls.del_norm / (cls.len_norm + cls.del_norm);
     
     // account for the drift from last state
-    reward += -50 * len_frac * (state_.curq_ - prev_state_.curq_);
-    reward += -50 * del_frac * (state_.d_exp_ - prev_state_.d_exp);
+    reward += -50 * len_frac * (state_.curq_ - prev_curq_);
+    reward += -50 * del_frac * (state_.d_exp_ - prev_d_exp_);
     
     // account for drift from the mean
     reward += -50 * len_frac * (state_.curq_ - state_.avg_[Q_LENGTH]);
